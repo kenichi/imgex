@@ -37,7 +37,7 @@ func TestIntegration_PublicImages(t *testing.T) {
 				t.Fatalf("Config is nil for %s", tc.imageRef)
 			}
 
-			t.Logf("Config for %s: User=%s, Cmd=%v, Entrypoint=%v", 
+			t.Logf("Config for %s: User=%s, Cmd=%v, Entrypoint=%v",
 				tc.imageRef, config.User, config.Cmd, config.Entrypoint)
 
 			var buf bytes.Buffer
@@ -84,24 +84,24 @@ func TestIntegration_ConfigValidation(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name           string
-		imageRef       string
-		expectedCmd    []string
-		expectedEnv    bool
-		expectedUser   string
+		name         string
+		imageRef     string
+		expectedCmd  []string
+		expectedEnv  bool
+		expectedUser string
 	}{
 		{
-			name:        "alpine",
-			imageRef:    "alpine:latest",
-			expectedCmd: []string{"/bin/sh"},
-			expectedEnv: true,
+			name:         "alpine",
+			imageRef:     "alpine:latest",
+			expectedCmd:  []string{"/bin/sh"},
+			expectedEnv:  true,
 			expectedUser: "",
 		},
 		{
-			name:        "nginx-alpine", 
-			imageRef:    "nginx:alpine",
-			expectedCmd: []string{"nginx", "-g", "daemon off;"},
-			expectedEnv: true,
+			name:         "nginx-alpine",
+			imageRef:     "nginx:alpine",
+			expectedCmd:  []string{"nginx", "-g", "daemon off;"},
+			expectedEnv:  true,
 			expectedUser: "",
 		},
 	}

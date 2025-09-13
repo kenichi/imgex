@@ -37,7 +37,7 @@ func getLastErrorInternal() string {
 func get_image_config_json(image_ref *C.char, auth_json *C.char) *C.char {
 	imageRef := C.GoString(image_ref)
 	authJSON := C.GoString(auth_json)
-	
+
 	var auth *lib.AuthConfig
 	if authJSON != "" {
 		auth = &lib.AuthConfig{}
@@ -69,7 +69,7 @@ func export_image_filesystem_to_file(image_ref *C.char, output_path *C.char, aut
 	imageRef := C.GoString(image_ref)
 	outputPath := C.GoString(output_path)
 	authJSON := C.GoString(auth_json)
-	
+
 	var auth *lib.AuthConfig
 	if authJSON != "" {
 		auth = &lib.AuthConfig{}

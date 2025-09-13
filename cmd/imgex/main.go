@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ken/imgex/lib"
+	"github.com/kenichi/imgex/lib"
 	"github.com/spf13/cobra"
 )
 

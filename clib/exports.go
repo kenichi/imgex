@@ -9,7 +9,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/ken/imgex/lib"
+	"github.com/kenichi/imgex/lib"
 )
 
 var (

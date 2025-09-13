@@ -21,7 +21,7 @@ go build -o imgex ./cmd/imgex
 ### Go Library
 
 ```bash
-go get github.com/ken/imgex/lib
+go get github.com/kenichi/imgex/lib
 ```
 
 ### C Library

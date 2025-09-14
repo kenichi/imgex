@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -190,13 +191,17 @@ func (e *imageExporter) applyLayers(layers []v1.Layer) (map[string]*fileEntry, e
 	return filesystem, nil
 }
 
-// writeFilesystemTar writes the flattened filesystem map as a tar archive
+// writeFilesystemTar writes the flattened filesystem map as a tar archive.
+// Entries are sorted to ensure proper extraction order: directories first, then files, then links.
 func (e *imageExporter) writeFilesystemTar(filesystem map[string]*fileEntry, writer io.Writer) error {
 	tarWriter := tar.NewWriter(writer)
 	defer tarWriter.Close()
 
-	// Write each file/directory in the filesystem
-	for _, entry := range filesystem {
+	// Create sorted list of entries for proper extraction order
+	sortedEntries := e.sortTarEntries(filesystem)
+
+	// Write each file/directory in the correct order
+	for _, entry := range sortedEntries {
 		// Update header timestamps for consistency and format compatibility
 		entry.header.ModTime = time.Unix(0, 0)
 		// Clear unsupported fields for USTAR format
@@ -219,6 +224,62 @@ func (e *imageExporter) writeFilesystemTar(filesystem map[string]*fileEntry, wri
 	}
 
 	return nil
+}
+
+// sortTarEntries sorts filesystem entries for proper tar extraction order.
+// Order: directories (by depth), regular files, then links (symlinks/hardlinks).
+func (e *imageExporter) sortTarEntries(filesystem map[string]*fileEntry) []*fileEntry {
+	// Convert map to slice for sorting
+	entries := make([]*fileEntry, 0, len(filesystem))
+	for _, entry := range filesystem {
+		entries = append(entries, entry)
+	}
+
+	// Sort entries by type and path
+	sort.Slice(entries, func(i, j int) bool {
+		entryA, entryB := entries[i], entries[j]
+
+		// Get type priorities (lower number = earlier in tar)
+		priorityA := e.getTypePriority(entryA.header.Typeflag)
+		priorityB := e.getTypePriority(entryB.header.Typeflag)
+
+		// If different types, sort by priority
+		if priorityA != priorityB {
+			return priorityA < priorityB
+		}
+
+		// Same type - sort by path depth, then alphabetically
+		pathA, pathB := entryA.header.Name, entryB.header.Name
+
+		// For directories, sort by depth (shallower first)
+		if entryA.header.Typeflag == tar.TypeDir && entryB.header.Typeflag == tar.TypeDir {
+			depthA := strings.Count(pathA, "/")
+			depthB := strings.Count(pathB, "/")
+			if depthA != depthB {
+				return depthA < depthB
+			}
+		}
+
+		// Finally, sort alphabetically for consistent ordering
+		return pathA < pathB
+	})
+
+	return entries
+}
+
+// getTypePriority returns the priority for tar entry types.
+// Lower numbers are written first in the tar archive.
+func (e *imageExporter) getTypePriority(typeflag byte) int {
+	switch typeflag {
+	case tar.TypeDir:
+		return 1 // Directories first
+	case tar.TypeReg:
+		return 2 // Regular files second
+	case tar.TypeSymlink, tar.TypeLink:
+		return 3 // Links last (after their targets exist)
+	default:
+		return 2 // Treat other types like regular files
+	}
 }
 
 // isWhiteoutFile checks if a file is a Docker whiteout file used for deletions

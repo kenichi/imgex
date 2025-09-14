@@ -7,6 +7,15 @@ package lib
 
 import "io"
 
+// Version information for imgex
+const (
+	// Version is the current version of imgex
+	Version = "0.1.1"
+
+	// Description is a short description of imgex
+	Description = "Docker image export tool without Docker daemon"
+)
+
 // ImageConfig represents the configuration of a Docker image.
 // This structure contains the essential configuration fields that define
 // how a container should be run, extracted from the image manifest.

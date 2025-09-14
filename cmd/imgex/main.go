@@ -14,6 +14,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version information
+const (
+	version = "0.1.0"
+	description = "Docker image export tool without Docker daemon"
+)
+
 // Global flags for authentication, shared across all commands
 var (
 	username string // Registry username for private registries
@@ -33,8 +39,9 @@ func main() {
 // rootCmd defines the base command when called without any subcommands.
 // It provides global flags and serves as the parent for all subcommands.
 var rootCmd = &cobra.Command{
-	Use:   "imgex",
-	Short: "Docker image export tool without Docker daemon",
+	Use:     "imgex",
+	Short:   description,
+	Version: version,
 	Long: `imgex is a tool for extracting Docker image configurations and
 filesystems directly from registries without requiring a running Docker daemon.
 

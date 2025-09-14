@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "libimgex.h"
+#include "dist/libimgex.h"
 
 int main() {
     printf("Testing imgex C library...\n");

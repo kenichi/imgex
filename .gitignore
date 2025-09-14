@@ -1,1 +1,38 @@
+# Claude Code files
 .claude
+
+# Build artifacts (now everything goes in dist/)
+/dist/
+
+# Go build cache
+*.sum
+/vendor/
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+*.prof
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Log files
+*.log
+
+# Environment files
+.env
+.env.local

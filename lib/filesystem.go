@@ -2,6 +2,7 @@ package lib
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -133,18 +134,130 @@ func (e *imageExporter) ExportImageFilesystemToWriter(imageRef string, writer io
 	return nil
 }
 
+// ExportImageFilesystemWithOptions exports the complete filesystem with additional options.
+// This method supports compression and progress reporting during the export operation.
+func (e *imageExporter) ExportImageFilesystemWithOptions(imageRef string, outputPath string, auth *AuthConfig, opts *ExportOptions) error {
+	// Create the output file with proper permissions
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file %s: %w", outputPath, err)
+	}
+	defer func() {
+		// Ensure file is closed even if export fails
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close output file: %w", closeErr)
+		}
+	}()
+
+	// Delegate to the writer-based implementation for consistency
+	return e.ExportImageFilesystemToWriterWithOptions(imageRef, file, auth, opts)
+}
+
+// ExportImageFilesystemToWriterWithOptions exports the complete filesystem to a writer with options.
+// This method supports compression via gzip and progress callbacks during export.
+func (e *imageExporter) ExportImageFilesystemToWriterWithOptions(imageRef string, writer io.Writer, auth *AuthConfig, opts *ExportOptions) error {
+	if opts == nil {
+		opts = &ExportOptions{}
+	}
+
+	// Wrap writer with gzip compression if requested
+	var finalWriter io.Writer = writer
+	var gzipWriter *gzip.Writer
+	if opts.Compress {
+		gzipWriter = gzip.NewWriter(writer)
+		finalWriter = gzipWriter
+		defer func() {
+			if closeErr := gzipWriter.Close(); closeErr != nil {
+				// Log compression close error but don't override main error
+			}
+		}()
+	}
+
+	// Call progress callback if provided
+	if opts.Progress != nil {
+		opts.Progress(0, 4, "Parsing image reference")
+	}
+
+	// Parse and validate the image reference
+	ref, err := name.ParseReference(imageRef)
+	if err != nil {
+		return fmt.Errorf("failed to parse image reference %s: %w", imageRef, err)
+	}
+
+	// Configure authentication for registry access
+	var authOption remote.Option
+	if auth != nil {
+		// Use provided credentials for private registries
+		authOption = remote.WithAuth(&authn.Basic{
+			Username: auth.Username,
+			Password: auth.Password,
+		})
+	} else {
+		// Fall back to system keychain (Docker credentials, etc.)
+		authOption = remote.WithAuthFromKeychain(authn.DefaultKeychain)
+	}
+
+	if opts.Progress != nil {
+		opts.Progress(1, 4, "Fetching image manifest")
+	}
+
+	// Fetch the complete image from the registry
+	image, err := remote.Image(ref, authOption)
+	if err != nil {
+		return fmt.Errorf("failed to fetch image %s: %w", imageRef, err)
+	}
+
+	if opts.Progress != nil {
+		opts.Progress(2, 4, "Processing image layers")
+	}
+
+	// Get the ordered list of layers from the image
+	layers, err := image.Layers()
+	if err != nil {
+		return fmt.Errorf("failed to get image layers: %w", err)
+	}
+
+	// Apply all layers to build the final filesystem state
+	filesystem, err := e.applyLayersWithProgress(layers, opts.Progress)
+	if err != nil {
+		return fmt.Errorf("failed to apply layers: %w", err)
+	}
+
+	if opts.Progress != nil {
+		opts.Progress(3, 4, "Writing filesystem archive")
+	}
+
+	// Write the flattened filesystem as a tar archive
+	err = e.writeFilesystemTar(filesystem, finalWriter)
+	if err != nil {
+		return fmt.Errorf("failed to write filesystem tar: %w", err)
+	}
+
+	if opts.Progress != nil {
+		opts.Progress(4, 4, "Export complete")
+	}
+
+	return nil
+}
+
 // fileEntry represents a single file or directory in the flattened filesystem
 type fileEntry struct {
 	header *tar.Header // tar header with metadata (name, mode, size, etc.)
 	data   []byte      // file content data (empty for directories)
 }
 
-// applyLayers processes all image layers in order and builds the final filesystem state.
+// applyLayersWithProgress processes all image layers in order and builds the final filesystem state.
 // It handles Docker layer application rules including whiteout files for deletions.
-func (e *imageExporter) applyLayers(layers []v1.Layer) (map[string]*fileEntry, error) {
+// Provides progress callbacks during layer processing.
+func (e *imageExporter) applyLayersWithProgress(layers []v1.Layer, progress ProgressCallback) (map[string]*fileEntry, error) {
 	filesystem := make(map[string]*fileEntry)
 
 	for i, layer := range layers {
+		// Report progress for each layer
+		if progress != nil {
+			progress(i, len(layers), fmt.Sprintf("Processing layer %d/%d", i+1, len(layers)))
+		}
+
 		// Get the layer content as a tar stream
 		layerReader, err := layer.Uncompressed()
 		if err != nil {
@@ -189,6 +302,12 @@ func (e *imageExporter) applyLayers(layers []v1.Layer) (map[string]*fileEntry, e
 	}
 
 	return filesystem, nil
+}
+
+// applyLayers processes all image layers in order and builds the final filesystem state.
+// It handles Docker layer application rules including whiteout files for deletions.
+func (e *imageExporter) applyLayers(layers []v1.Layer) (map[string]*fileEntry, error) {
+	return e.applyLayersWithProgress(layers, nil)
 }
 
 // writeFilesystemTar writes the flattened filesystem map as a tar archive.

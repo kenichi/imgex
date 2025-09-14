@@ -10,7 +10,7 @@ import "io"
 // Version information for imgex
 const (
 	// Version is the current version of imgex
-	Version = "0.1.1"
+	Version = "0.1.2"
 
 	// Description is a short description of imgex
 	Description = "Docker image export tool without Docker daemon"
@@ -59,6 +59,19 @@ type AuthConfig struct {
 	Registry string `json:"registry"`
 }
 
+// ProgressCallback is called during export operations to report progress.
+// Parameters: current step, total steps, description of current operation
+type ProgressCallback func(current, total int, description string)
+
+// ExportOptions contains options for filesystem export operations
+type ExportOptions struct {
+	// Compress enables gzip compression of the output tar (creates .tar.gz)
+	Compress bool
+
+	// Progress callback for reporting export progress
+	Progress ProgressCallback
+}
+
 // ImageExporter defines the interface for extracting Docker image data.
 // Implementations of this interface can retrieve image configurations and
 // export complete filesystems without requiring a Docker daemon.
@@ -77,4 +90,10 @@ type ImageExporter interface {
 	// This allows streaming the tar data directly without creating intermediate files.
 	// The writer receives the tar data as it's being generated.
 	ExportImageFilesystemToWriter(imageRef string, writer io.Writer, auth *AuthConfig) error
+
+	// ExportImageFilesystemWithOptions exports with additional options like compression and progress
+	ExportImageFilesystemWithOptions(imageRef string, outputPath string, auth *AuthConfig, opts *ExportOptions) error
+
+	// ExportImageFilesystemToWriterWithOptions exports to writer with additional options
+	ExportImageFilesystemToWriterWithOptions(imageRef string, writer io.Writer, auth *AuthConfig, opts *ExportOptions) error
 }

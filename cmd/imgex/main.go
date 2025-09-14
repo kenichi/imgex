@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/kenichi/imgex/lib"
 	"github.com/spf13/cobra"
@@ -83,9 +84,13 @@ This command downloads all layers of the image and reconstructs the flattened
 filesystem, equivalent to what 'docker export' produces. The output can be
 written to a file or streamed to stdout for piping to other tools.
 
+The --compress flag enables gzip compression, creating a .tar.gz file.
+The --progress flag shows download and processing progress (file output only).
+
 Examples:
   imgex filesystem alpine:latest > alpine.tar
   imgex filesystem --output nginx.tar nginx:alpine
+  imgex filesystem --compress --progress --output alpine.tar.gz alpine:latest
   imgex filesystem ubuntu:latest | tar -tv  # List contents`,
 	Args: cobra.ExactArgs(1),
 	RunE: runFilesystemCommand,
@@ -123,6 +128,8 @@ func runConfigCommand(cmd *cobra.Command, args []string) error {
 func runFilesystemCommand(cmd *cobra.Command, args []string) error {
 	imageRef := args[0]
 	outputPath, _ := cmd.Flags().GetString("output")
+	compress, _ := cmd.Flags().GetBool("compress")
+	showProgress, _ := cmd.Flags().GetBool("progress")
 
 	// Build authentication configuration if credentials are provided
 	auth := buildAuthConfig()
@@ -130,17 +137,37 @@ func runFilesystemCommand(cmd *cobra.Command, args []string) error {
 	// Create exporter
 	exporter := lib.NewImageExporter()
 
+	// Set up export options
+	opts := &lib.ExportOptions{
+		Compress: compress,
+	}
+
+	// Add progress callback if requested (only for file output to avoid interfering with stdout)
+	if showProgress && outputPath != "" {
+		opts.Progress = func(current, total int, description string) {
+			fmt.Fprintf(os.Stderr, "\r[%d/%d] %s", current+1, total, description)
+			if current == total-1 {
+				fmt.Fprintf(os.Stderr, "\n")
+			}
+		}
+	}
+
 	// Export to file or stdout based on flags
 	if outputPath != "" {
-		// Export to specified file
-		err := exporter.ExportImageFilesystem(imageRef, outputPath, auth)
+		// Append .gz extension if compression is enabled and not already present
+		if compress && !strings.HasSuffix(outputPath, ".gz") {
+			outputPath += ".gz"
+		}
+
+		// Export to specified file with options
+		err := exporter.ExportImageFilesystemWithOptions(imageRef, outputPath, auth, opts)
 		if err != nil {
 			return fmt.Errorf("failed to export filesystem: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Filesystem exported to %s\n", outputPath)
 	} else {
-		// Stream to stdout for piping
-		err := exporter.ExportImageFilesystemToWriter(imageRef, os.Stdout, auth)
+		// Stream to stdout for piping with options
+		err := exporter.ExportImageFilesystemToWriterWithOptions(imageRef, os.Stdout, auth, opts)
 		if err != nil {
 			return fmt.Errorf("failed to export filesystem: %w", err)
 		}
@@ -180,4 +207,8 @@ func init() {
 	// Command-specific flags
 	filesystemCmd.Flags().StringP("output", "o", "",
 		"Output file path (default: stdout)")
+	filesystemCmd.Flags().BoolP("compress", "z", false,
+		"Compress output with gzip (creates .tar.gz)")
+	filesystemCmd.Flags().Bool("progress", false,
+		"Show progress during export (only for file output)")
 }
